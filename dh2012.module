@@ -1,0 +1,127 @@
+<?php
+
+/**
+ * Példa az EntityFieldQuery használatára.
+ */
+function dh2012_example() {
+
+  // Megkeressük azokat a cikkeket, amelyehez az 1-es azonosítójú
+  // cimke van hozzárendelve.
+  $query = new EntityFieldQuery;
+  $entities = $query
+    ->entityCondition('entity_type', 'node')
+    ->propertyCondition('type', 'article')
+    ->fieldCondition('field_tags', 'tid', 1)
+    ->execute();
+  dpm($entities);
+
+  $nodes = node_load_multiple(array_keys($entities['node']));
+  dpm($nodes);
+}
+
+/**
+ * Field widget módosítása form alterben.
+ */
+function dh2012_form_article_node_form_alter(&$form, $form_state) {
+  // A nem regisztrált felhasználó számára kötelező kitölteni a cikk törzsét.
+  if (user_is_anonymous()) {
+    $form['body'][$form['body']['#language']][0]['#required'] = TRUE;
+  }
+}
+
+###################################################
+# Hozzunk létre saját widgetet meglévő fieldhez. #
+#################################################
+
+/**
+ * Implements hook_field_widget_info().
+ */
+function dh2012_field_widget_info() {
+  $return = array();
+
+  $return['dh2012_url'] = array(
+    // Ezzel a névvel jelenik meg a widget listában.
+    'label' => t('URL'),
+    // Itt soroljuk fel a mező típusokat, amihez ki tudjuk választani a widgetet.
+    'field types' => array('text'),
+  );
+
+  return $return;
+}
+
+/**
+ * Implements hook_field_widget_form().
+ */
+function dh2012_field_widget_form(&$form, &$form_state, $field, $instance,
+                                  $langcode, $items, $delta, $element) {
+  switch ($instance['widget']['type']) {
+    case 'dh2012_url':
+      // Addjuk meg azt a form elemet, amin bekérjük az adatot.
+      $def = isset($items[$delta]['value']) ? $items[$delta]['value'] : NULL;
+      $element['value'] = array(
+        '#type' => 'textfield',
+        '#default_value' => $def,
+        '#attributes' => array('class' => array('text-url')),
+        '#maxlength' => $field['settings']['max_length'],
+        '#element_validate' => array('dh2012_url_field_widget_validate'),
+      );
+    break;
+  }
+
+  return $element;
+}
+
+function dh2012_url_field_widget_validate($element, &$form_state) {
+  // Ha nem igazi web címet irtunk be, akkor hibaüzenetet írunk ki.
+  if (!filter_var($element['#value'], FILTER_VALIDATE_URL)) {
+    form_error($element, t('Not a valid URL.'));
+  }
+}
+
+#####################################################
+# Hozzunk létre saját formattert meglévő mezőhöz. #
+###################################################
+
+/**
+ * Implements hook_field_formatter_info().
+ */
+function dh2012_field_formatter_info() {
+  $return = array();
+
+  $return['dh2012_download'] = array(
+    // Ezzel a névvel jelenik meg a mező a megjelenítési formátumok között.
+    'label' => t('Download button'),
+    // Az itt felsorolt mező típusoknál lehet kiválasztani.
+    'field types' => array('file', 'image'),
+  );
+
+  return $return;
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ */
+function dh2012_field_formatter_view($entity_type, $entities, $field,
+                                     $instances, $langcode, &$items, $display) {
+  $element = array();
+
+  switch ($display['type']) {
+    case 'dh2012_download':
+      // Végig megyünk a mező értékein és kiíratjuk a letöltés gombot.
+      foreach ($items as $delta => $item) {
+        if (!empty($item['uri'])) {
+          $options = array(
+            'attributes' => array('class' => array('button', 'dh12-download')),
+          );
+
+          // Kiíratjuk a letöltés gombot.
+          $element[$delta] = array(
+            '#markup' => l(t('Download'), file_create_url($item['uri']), $options),
+          );
+        }
+      }
+      break;
+  }
+
+  return $element;
+}
